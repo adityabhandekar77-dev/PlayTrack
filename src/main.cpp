@@ -1,4 +1,5 @@
 #include "tracking_engine.h"
+#include "process_detector.h"
 
 #include <raylib.h>
 
@@ -9,6 +10,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -59,17 +61,86 @@ std::string clockText() {
     return buffer;
 }
 
+bool isBackgroundTrackerRunning() {
+    HANDLE mutex = OpenMutexW(SYNCHRONIZE, FALSE, L"Local\\PlayTrack_Tracker_Instance");
+    if (!mutex) return false;
+    CloseHandle(mutex);
+    return true;
+}
+
+bool startBackgroundTracker() {
+    wchar_t modulePath[MAX_PATH]{};
+    DWORD length = GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
+    if (length == 0 || length >= MAX_PATH) return false;
+
+    std::filesystem::path directory = std::filesystem::path(modulePath).parent_path();
+    std::filesystem::path trackerPath = directory / L"PlayTrackTracker.exe";
+    if (!std::filesystem::exists(trackerPath)) return false;
+
+    HANDLE stopEvent = CreateEventW(nullptr, TRUE, FALSE, L"Local\\PlayTrack_Tracker_Stop");
+    if (!stopEvent) return false;
+    ResetEvent(stopEvent);
+
+    std::wstring command = L"\"" + trackerPath.wstring() + L"\"";
+    STARTUPINFOW startup{};
+    startup.cb = sizeof(startup);
+    PROCESS_INFORMATION process{};
+    BOOL created = CreateProcessW(
+        trackerPath.c_str(), command.data(), nullptr, nullptr, FALSE,
+        CREATE_NO_WINDOW, nullptr, directory.c_str(), &startup, &process
+    );
+    if (created) {
+        CloseHandle(process.hThread);
+        CloseHandle(process.hProcess);
+    }
+    CloseHandle(stopEvent);
+    return created != FALSE;
+}
+
+bool stopBackgroundTracker() {
+    HANDLE stopEvent = OpenEventW(EVENT_MODIFY_STATE, FALSE, L"Local\\PlayTrack_Tracker_Stop");
+    if (!stopEvent) return false;
+    bool signalled = SetEvent(stopEvent) != FALSE;
+    CloseHandle(stopEvent);
+    return signalled;
+}
+
+void refreshDashboardData(std::vector<Application>& applications) {
+    auto saved = loadApplications();
+    auto now = Clock::now();
+    for (auto& fresh : saved) {
+        for (const auto& old : applications) {
+            if (_wcsicmp(fresh.executable.c_str(), old.executable.c_str()) == 0) {
+                fresh.running = old.running;
+                fresh.sessionStart = old.sessionStart;
+                fresh.creditedSessionSeconds = old.creditedSessionSeconds;
+                break;
+            }
+        }
+        bool runningNow = isProcessRunning(fresh.executable);
+        if (runningNow && !fresh.running) {
+            fresh.running = true;
+            fresh.sessionStart = now;
+            fresh.creditedSessionSeconds = 0;
+        } else if (!runningNow) {
+            fresh.running = false;
+            fresh.creditedSessionSeconds = 0;
+        }
+    }
+    applications = std::move(saved);
+}
+
 int main() {
     std::vector<Application> applications = loadApplications();
     int selected = 0;
-    bool tracking = false;
+    bool tracking = isBackgroundTrackerRunning();
     bool addDialog = false;
     int addField = 0;
     std::string newName;
     std::string newExecutable;
     std::string message = "A: add application   S: start/stop   UP/DOWN: select   Q: quit";
-    double lastProcessCheck = 0.0;
-    double lastAutosave = 0.0;
+    double lastRefresh = 0.0;
+    double lastStatusCheck = 0.0;
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT);
     InitWindow(1100, 680, "PlayTrack");
@@ -104,7 +175,7 @@ int main() {
                             app.executable = executable;
                             applications.push_back(app);
                             selected = static_cast<int>(applications.size()) - 1;
-                            saveApplications(applications);
+                            if (!isBackgroundTrackerRunning()) saveApplications(applications);
                             message = "Application added and saved.";
                             addDialog = false;
                             newName.clear();
@@ -114,8 +185,7 @@ int main() {
                 }
             } else {
                 if (key == KEY_Q || key == KEY_ESCAPE) {
-                    if (tracking) stopTracking(applications);
-                    else saveApplications(applications);
+                    if (!isBackgroundTrackerRunning()) saveApplications(applications);
                     CloseWindow();
                     return 0;
                 } else if (key == KEY_UP && !applications.empty()) {
@@ -123,24 +193,34 @@ int main() {
                 } else if (key == KEY_DOWN && !applications.empty()) {
                     selected = (selected + 1) % static_cast<int>(applications.size());
                 } else if (key == KEY_A) {
-                    addDialog = true;
-                    addField = 0;
-                    newName.clear();
-                    newExecutable.clear();
-                    message = "Type a name and executable; TAB switches fields.";
-                } else if (key == KEY_S) {
-                    tracking = !tracking;
-                    if (tracking) {
-                        startTracking(applications);
-                        lastProcessCheck = 0.0;
-                        lastAutosave = GetTime();
-                        message = "Tracking enabled.";
+                    if (isBackgroundTrackerRunning()) {
+                        message = "Stop tracking before adding an application.";
                     } else {
-                        stopTracking(applications);
-                        message = "Tracking stopped. Data saved.";
+                        addDialog = true;
+                        addField = 0;
+                        newName.clear();
+                        newExecutable.clear();
+                        message = "Type a name and executable; TAB switches fields.";
+                    }
+                } else if (key == KEY_S) {
+                    if (isBackgroundTrackerRunning()) {
+                        if (stopBackgroundTracker()) {
+                            tracking = false;
+                            message = "Stop requested. Saving tracked time...";
+                        } else {
+                            message = "Could not signal the background tracker.";
+                        }
+                    } else {
+                        if (startBackgroundTracker()) {
+                            tracking = true;
+                            message = "Background tracker started.";
+                        } else {
+                            tracking = false;
+                            message = "Could not start tracker. Check PlayTrackTracker.exe.";
+                        }
                     }
                 } else if (key == KEY_R) {
-                    if (!tracking) applications = loadApplications();
+                    if (!isBackgroundTrackerRunning()) applications = loadApplications();
                     selected = applications.empty() ? 0 : std::clamp(selected, 0, static_cast<int>(applications.size()) - 1);
                     message = tracking ? "Tracking refreshes automatically." : "Data reloaded from playtime.json.";
                 }
@@ -160,14 +240,15 @@ int main() {
         }
 
         double nowSeconds = GetTime();
-        if (tracking && nowSeconds - lastProcessCheck >= 2.0) {
-            updateTracking(applications);
-            lastProcessCheck = nowSeconds;
+        if (nowSeconds - lastStatusCheck >= 1.0) {
+            tracking = isBackgroundTrackerRunning();
+            lastStatusCheck = nowSeconds;
         }
 
-        if (tracking && nowSeconds - lastAutosave >= 10.0) {
-            saveApplications(applications);
-            lastAutosave = nowSeconds;
+        if (tracking && nowSeconds - lastRefresh >= 2.0) {
+            refreshDashboardData(applications);
+            selected = applications.empty() ? 0 : std::clamp(selected, 0, static_cast<int>(applications.size()) - 1);
+            lastRefresh = nowSeconds;
         }
 
         int w = GetScreenWidth();
@@ -285,8 +366,7 @@ int main() {
         EndDrawing();
     }
 
-    if (tracking) stopTracking(applications);
-    else saveApplications(applications);
+    if (!isBackgroundTrackerRunning()) saveApplications(applications);
     if (customFontLoaded) UnloadFont(UI_FONT);
     CloseWindow();
     return 0;

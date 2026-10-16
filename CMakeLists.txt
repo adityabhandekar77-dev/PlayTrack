@@ -1,3 +1,4 @@
+
 cmake_minimum_required(VERSION 3.20)
 
 project(PlayTrack LANGUAGES CXX)
@@ -26,4 +27,18 @@ target_link_libraries(PlayTrack PRIVATE
     opengl32
     gdi32
     winmm
+)
+
+add_executable(PlayTrackTracker WIN32
+    src/tracker_main.cpp
+    src/process_detector.cpp
+    src/tracking_engine.cpp
+)
+
+target_compile_options(PlayTrackTracker PRIVATE -municode)
+target_link_options(PlayTrackTracker PRIVATE -municode)
+
+target_include_directories(PlayTrackTracker PRIVATE
+    include
+    "C:/msys64/ucrt64/include"
 )
