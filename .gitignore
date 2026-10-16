@@ -28,3 +28,7 @@ build.ninja
 # Local application data
 data/
 *.log
+
+# Local playtime data
+/playtime.json
+/playtime.txt

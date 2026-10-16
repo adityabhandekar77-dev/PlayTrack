@@ -8,10 +8,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(PlayTrack
     src/main.cpp
+    src/process_detector.cpp
 )
 
 target_include_directories(PlayTrack PRIVATE
+    include
     "C:/Libraries/raylib/src"
+    "C:/msys64/ucrt64/include"
 )
 
 target_link_directories(PlayTrack PRIVATE
