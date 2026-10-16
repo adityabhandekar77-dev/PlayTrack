@@ -1,4 +1,3 @@
-
 cmake_minimum_required(VERSION 3.20)
 
 project(PlayTrack LANGUAGES CXX)
@@ -9,6 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_executable(PlayTrack
     src/main.cpp
     src/process_detector.cpp
+    src/tracking_engine.cpp
 )
 
 target_include_directories(PlayTrack PRIVATE
