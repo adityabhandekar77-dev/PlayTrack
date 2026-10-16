@@ -40,6 +40,7 @@ struct Application
     bool running = false;
     Clock::time_point sessionStart{};
     Clock::time_point lastSave{};
+    long long creditedSessionSeconds = 0;
 };
 
 std::string toUtf8(const std::wstring& value)
@@ -324,6 +325,7 @@ int main()
                 app.running = false;
                 app.sessionStart = Clock::now();
                 app.lastSave = app.sessionStart;
+                app.creditedSessionSeconds = 0;
             }
 
             while (!shutdownRequested.load())
@@ -350,7 +352,8 @@ int main()
                                     now - app.sessionStart
                                 ).count();
 
-                        app.totalSeconds += elapsed;
+                        app.totalSeconds += elapsed - app.creditedSessionSeconds;
+                        app.creditedSessionSeconds = 0;
                         app.running = false;
 
                         saveApplications(applications);
@@ -370,8 +373,8 @@ int main()
                         if (now - app.lastSave >=
                             std::chrono::seconds(10))
                         {
-                            app.totalSeconds += elapsed;
-                            app.sessionStart = now;
+                            app.totalSeconds += elapsed - app.creditedSessionSeconds;
+                            app.creditedSessionSeconds = elapsed;
                             app.lastSave = now;
 
                             saveApplications(applications);
@@ -396,7 +399,8 @@ int main()
                                 now - app.sessionStart
                             ).count();
 
-                    app.totalSeconds += elapsed;
+                    app.totalSeconds += elapsed - app.creditedSessionSeconds;
+                    app.creditedSessionSeconds = 0;
                     app.running = false;
                 }
             }
