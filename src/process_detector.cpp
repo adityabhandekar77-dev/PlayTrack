@@ -4,8 +4,16 @@
 #include <windows.h>
 #include <tlhelp32.h>
 #include <cwchar>
+#include <filesystem>
 
 bool isProcessRunning(const std::wstring& processName) {
+    std::filesystem::path targetPath(processName);
+    std::wstring targetName = targetPath.filename().wstring();
+
+    if (targetName.empty()) {
+        targetName = processName;
+    }
+
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 
     if (snapshot == INVALID_HANDLE_VALUE) {
@@ -19,7 +27,7 @@ bool isProcessRunning(const std::wstring& processName) {
 
     if (Process32FirstW(snapshot, &processEntry)) {
         do {
-            if (_wcsicmp(processEntry.szExeFile, processName.c_str()) == 0) {
+            if (_wcsicmp(processEntry.szExeFile, targetName.c_str()) == 0) {
                 found = true;
                 break;
             }

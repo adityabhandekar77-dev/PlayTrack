@@ -10,6 +10,7 @@ add_executable(PlayTrack
     src/main.cpp
     src/process_detector.cpp
     src/tracking_engine.cpp
+    src/app_discovery.cpp
 )
 
 target_include_directories(PlayTrack PRIVATE
@@ -33,6 +34,7 @@ add_executable(PlayTrackTracker WIN32
     src/tracker_main.cpp
     src/process_detector.cpp
     src/tracking_engine.cpp
+    src/app_discovery.cpp
 )
 
 target_compile_options(PlayTrackTracker PRIVATE -municode)

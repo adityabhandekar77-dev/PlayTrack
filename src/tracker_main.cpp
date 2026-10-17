@@ -1,4 +1,6 @@
 #include "tracking_engine.h"
+#include "app_discovery.h"
+#include <system_error>
 
 #define WIN32_LEAN_AND_MEAN
 #define NOGDI
@@ -36,13 +38,36 @@ SetCurrentDirectoryW(appDirectory.c_str());
         return 3;
     }
 
-    std::vector<Application> applications = loadApplications();
-    startTracking(applications);
-    auto lastSave = std::chrono::steady_clock::now();
+   std::vector<Application> applications = loadApplications();
+
+std::filesystem::path trackedFolder = appDirectory / L"tracked-apps";
+std::error_code folderError;
+std::filesystem::create_directories(trackedFolder, folderError);
+
+std::vector<std::filesystem::path> scanFolders = {
+    trackedFolder
+};
+
+auto discovered = discoverApplications(scanFolders);
+mergeDiscoveredApplications(applications, discovered);
+
+startTracking(applications);
+saveApplications(applications);
+
+auto lastSave = std::chrono::steady_clock::now();
+auto lastDiscovery = lastSave;
 
     while (WaitForSingleObject(stopEvent, 2000) == WAIT_TIMEOUT) {
-        updateTracking(applications);
-        auto now = std::chrono::steady_clock::now();
+      auto now = std::chrono::steady_clock::now();
+
+if (now - lastDiscovery >= std::chrono::seconds(10)) {
+    auto discovered = discoverApplications(scanFolders);
+    mergeDiscoveredApplications(applications, discovered);
+    lastDiscovery = now;
+    saveApplications(applications);
+}
+
+updateTracking(applications);
         if (now - lastSave >= std::chrono::seconds(10)) {
             saveApplications(applications);
             lastSave = now;
