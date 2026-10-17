@@ -1,26 +1,34 @@
 
 #include "app_discovery.h"
 
-#include <algorithm>
-#include <cwctype>
-#include <string>
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <shobjidl.h>
+#include <objbase.h>
 
-static bool isExecutable(const std::filesystem::path& path) {
-    return path.has_extension() &&
-           _wcsicmp(path.extension().c_str(), L".exe") == 0;
+#include <algorithm>
+#include <system_error>
+#include <string>
+#include <utility>
+
+static bool hasExtension(
+    const std::filesystem::path& path,
+    const wchar_t* extension
+) {
+    return _wcsicmp(path.extension().c_str(), extension) == 0;
 }
 
 static std::wstring normalizePath(const std::filesystem::path& path) {
     std::error_code error;
-    auto absolutePath = std::filesystem::weakly_canonical(path, error);
+    auto result = std::filesystem::weakly_canonical(path, error);
 
     if (error) {
         error.clear();
-        absolutePath = std::filesystem::absolute(path, error);
-        if (error) absolutePath = path;
+        result = std::filesystem::absolute(path, error);
+        if (error) result = path;
     }
 
-    return absolutePath.lexically_normal().wstring();
+    return result.lexically_normal().wstring();
 }
 
 static bool samePath(
@@ -31,6 +39,77 @@ static bool samePath(
         normalizePath(first).c_str(),
         normalizePath(second).c_str()
     ) == 0;
+}
+
+static bool resolveShortcut(
+    const std::filesystem::path& shortcut,
+    std::filesystem::path& target
+) {
+    HRESULT initResult = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+
+    if (FAILED(initResult) && initResult != RPC_E_CHANGED_MODE) {
+        return false;
+    }
+
+    bool uninitialize = SUCCEEDED(initResult);
+    IShellLinkW* shellLink = nullptr;
+    IPersistFile* persistFile = nullptr;
+    bool resolved = false;
+
+    HRESULT result = CoCreateInstance(
+        CLSID_ShellLink,
+        nullptr,
+        CLSCTX_INPROC_SERVER,
+        IID_IShellLinkW,
+        reinterpret_cast<void**>(&shellLink)
+    );
+
+    if (SUCCEEDED(result)) {
+        result = shellLink->QueryInterface(
+            IID_IPersistFile,
+            reinterpret_cast<void**>(&persistFile)
+        );
+    }
+
+    if (SUCCEEDED(result)) {
+        result = persistFile->Load(shortcut.c_str(), STGM_READ);
+    }
+
+    if (SUCCEEDED(result)) {
+        wchar_t targetBuffer[32768]{};
+        WIN32_FIND_DATAW findData{};
+
+        result = shellLink->GetPath(
+            targetBuffer,
+            static_cast<int>(std::size(targetBuffer)),
+            &findData,
+            SLGP_RAWPATH
+        );
+
+        if (SUCCEEDED(result) && targetBuffer[0] != L'\0') {
+            target = targetBuffer;
+
+            if (target.is_relative()) {
+                std::error_code error;
+                target = std::filesystem::absolute(
+                    shortcut.parent_path() / target, error
+                );
+                if (error) target.clear();
+            }
+
+            std::error_code error;
+            resolved = !target.empty() &&
+                       std::filesystem::is_regular_file(target, error) &&
+                       !error &&
+                       hasExtension(target, L".exe");
+        }
+    }
+
+    if (persistFile) persistFile->Release();
+    if (shellLink) shellLink->Release();
+    if (uninitialize) CoUninitialize();
+
+    return resolved;
 }
 
 std::vector<Application> discoverApplications(
@@ -63,24 +142,40 @@ std::vector<Application> discoverApplications(
             const auto& entry = *iterator;
             std::error_code entryError;
 
-            if (entry.is_symlink(entryError) && entry.is_directory(entryError)) {
+            if (entry.is_symlink(entryError) &&
+                entry.is_directory(entryError)) {
                 iterator.disable_recursion_pending();
-            } else if (entry.is_regular_file(entryError) &&
-                       isExecutable(entry.path())) {
-                bool duplicate = false;
+            } else if (entry.is_regular_file(entryError)) {
+                auto source = entry.path();
+                std::filesystem::path executable;
 
-                for (const auto& app : discovered) {
-                    if (samePath(app.executable, entry.path())) {
-                        duplicate = true;
-                        break;
+                if (hasExtension(source, L".exe")) {
+                    executable = source;
+                } else if (hasExtension(source, L".lnk")) {
+                    if (!resolveShortcut(source, executable)) {
+                        iterator.increment(error);
+                        continue;
                     }
                 }
 
-                if (!duplicate) {
-                    Application app;
-                    app.name = entry.path().stem().string();
-                    app.executable = normalizePath(entry.path());
-                    discovered.push_back(std::move(app));
+                if (!executable.empty()) {
+                    executable = normalizePath(executable);
+
+                    bool duplicate = false;
+
+                    for (const auto& app : discovered) {
+                        if (samePath(app.executable, executable)) {
+                            duplicate = true;
+                            break;
+                        }
+                    }
+
+                    if (!duplicate) {
+                        Application app;
+                        app.name = source.stem().string();
+                        app.executable = executable.wstring();
+                        discovered.push_back(std::move(app));
+                    }
                 }
             }
 

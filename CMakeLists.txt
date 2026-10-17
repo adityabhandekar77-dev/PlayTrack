@@ -28,6 +28,8 @@ target_link_libraries(PlayTrack PRIVATE
     opengl32
     gdi32
     winmm
+    ole32
+    shell32
 )
 
 add_executable(PlayTrackTracker WIN32
@@ -43,4 +45,9 @@ target_link_options(PlayTrackTracker PRIVATE -municode)
 target_include_directories(PlayTrackTracker PRIVATE
     include
     "C:/msys64/ucrt64/include"
+)
+
+target_link_libraries(PlayTrackTracker PRIVATE
+    ole32
+    shell32
 )

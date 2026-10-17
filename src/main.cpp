@@ -130,7 +130,23 @@ void refreshDashboardData(std::vector<Application>& applications) {
     applications = std::move(saved);
 }
 
+
+
 int main() {
+
+        wchar_t modulePath[MAX_PATH]{};
+    DWORD length = GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
+
+    if (length > 0 && length < MAX_PATH) {
+        std::filesystem::path appDirectory(modulePath);
+        appDirectory = appDirectory.parent_path();
+
+        if (appDirectory.filename() == L"build") {
+            appDirectory = appDirectory.parent_path();
+        }
+
+        SetCurrentDirectoryW(appDirectory.c_str());
+    }
     std::vector<Application> applications = loadApplications();
     int selected = 0;
     bool tracking = isBackgroundTrackerRunning();
