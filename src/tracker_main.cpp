@@ -15,9 +15,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     DWORD length = GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
     if (length == 0 || length >= MAX_PATH) return 1;
     std::filesystem::path appDirectory(modulePath);
-    appDirectory = appDirectory.parent_path();
-    SetCurrentDirectoryW(appDirectory.c_str());
+appDirectory = appDirectory.parent_path();
 
+if (appDirectory.filename() == L"build") {
+    appDirectory = appDirectory.parent_path();
+}
+
+SetCurrentDirectoryW(appDirectory.c_str());
     HANDLE instanceMutex = CreateMutexW(nullptr, TRUE, L"Local\\PlayTrack_Tracker_Instance");
     if (!instanceMutex) return 2;
     if (GetLastError() == ERROR_ALREADY_EXISTS) {

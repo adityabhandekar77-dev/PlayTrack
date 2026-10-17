@@ -112,16 +112,26 @@ void stopTracking(std::vector<Application>& applications) {
     saveApplications(applications);
 }
 
+
 void updateTracking(std::vector<Application>& applications) {
     auto now = Clock::now();
     bool shouldSave = false;
+
     for (auto& app : applications) {
         bool processRunning = isProcessRunning(app.executable);
+
         if (processRunning && !app.running) {
             app.running = true;
             app.sessionStart = now;
             app.lastSave = now;
             app.creditedSessionSeconds = 0;
+        } else if (processRunning && app.running) {
+            accountSession(app, now);
+
+            if (now - app.lastSave >= std::chrono::seconds(10)) {
+                app.lastSave = now;
+                shouldSave = true;
+            }
         } else if (!processRunning && app.running) {
             accountSession(app, now);
             app.running = false;
@@ -129,5 +139,8 @@ void updateTracking(std::vector<Application>& applications) {
             shouldSave = true;
         }
     }
-    if (shouldSave) saveApplications(applications);
+
+    if (shouldSave) {
+        saveApplications(applications);
+    }
 }
