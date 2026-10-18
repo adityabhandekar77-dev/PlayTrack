@@ -1,5 +1,7 @@
 
 #include "app_discovery.h"
+#include <cwctype>
+#include <vector>
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -17,6 +19,46 @@ static bool hasExtension(
 ) {
     return _wcsicmp(path.extension().c_str(), extension) == 0;
 }
+
+
+static bool isHelperExecutable(const std::filesystem::path& path) {
+    std::wstring filename = path.stem().wstring();
+
+    std::transform(
+        filename.begin(),
+        filename.end(),
+        filename.begin(),
+        [](wchar_t ch) {
+            return static_cast<wchar_t>(towlower(ch));
+        }
+    );
+
+    const std::vector<std::wstring> excludedNames = {
+        L"unins",
+        L"uninstall",
+        L"setup",
+        L"installer",
+        L"dxwebsetup",
+        L"quicksfv",
+        L"vcredist",
+        L"unitycrashhandler",
+        L"crashpad",
+        L"easyanticheat_eos_setup",
+        L"bb-gpu-capabilities",
+        L"bb-probe",
+        L"start_protected_game"
+    };
+
+    for (const auto& excluded : excludedNames) {
+        if (filename.find(excluded) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+
 
 static std::wstring normalizePath(const std::filesystem::path& path) {
     std::error_code error;
@@ -158,8 +200,8 @@ std::vector<Application> discoverApplications(
                     }
                 }
 
-                if (!executable.empty()) {
-                    executable = normalizePath(executable);
+                 if (!executable.empty() && !isHelperExecutable(executable)) {
+    executable = normalizePath(executable);
 
                     bool duplicate = false;
 
