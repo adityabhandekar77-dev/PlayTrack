@@ -11,6 +11,7 @@ add_executable(PlayTrack
     src/process_detector.cpp
     src/tracking_engine.cpp
     src/app_discovery.cpp
+    src/app_config.cpp
 )
 
 target_include_directories(PlayTrack PRIVATE
@@ -37,11 +38,17 @@ add_executable(PlayTrackTracker WIN32
     src/process_detector.cpp
     src/tracking_engine.cpp
     src/app_discovery.cpp
+    src/app_config.cpp
 )
 
 target_compile_options(PlayTrackTracker PRIVATE -municode)
-target_link_options(PlayTrackTracker PRIVATE -municode)
 
+target_link_options(PlayTrackTracker PRIVATE
+    -municode
+    -static
+    -static-libgcc
+    -static-libstdc++
+)
 target_include_directories(PlayTrackTracker PRIVATE
     include
     "C:/msys64/ucrt64/include"

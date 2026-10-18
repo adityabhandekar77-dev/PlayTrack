@@ -1,0 +1,7 @@
+{
+    "scan_folders": [
+        "tracked-apps",
+        "C:/Games"
+    ],
+    "scan_interval_seconds": 10
+}
