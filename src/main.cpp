@@ -293,6 +293,24 @@ int main() {
         int footerY = h - footerH - 16;
 
         DrawRectangleLines(listX, top, listW, contentH, LINE);
+        long long totalUsageSeconds = 0;
+
+for (const auto& app : applications) {
+    totalUsageSeconds += app.totalSeconds;
+
+    if (app.running) {
+        totalUsageSeconds +=
+            std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::steady_clock::now() - app.sessionStart
+            ).count();
+    }
+}
+
+std::string summary = std::to_string(applications.size())
+    + " applications  |  Total usage: "
+    + formatTime(totalUsageSeconds);
+
+drawText(summary.c_str(), 34, 96, 14, MUTED);
         drawText("Applications", listX + 12, top + 10, 18, TEXT);
         drawLine(listX + 8, top + 38, listX + listW - 8, top + 38);
         drawText("#", listX + 16, top + 48, 16, MUTED);
