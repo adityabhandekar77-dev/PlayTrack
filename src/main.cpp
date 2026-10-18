@@ -105,9 +105,11 @@ bool stopBackgroundTracker() {
     return signalled;
 }
 
+
 void refreshDashboardData(std::vector<Application>& applications) {
     auto saved = loadApplications();
     auto now = Clock::now();
+
     for (auto& fresh : saved) {
         for (const auto& old : applications) {
             if (_wcsicmp(fresh.executable.c_str(), old.executable.c_str()) == 0) {
@@ -117,7 +119,9 @@ void refreshDashboardData(std::vector<Application>& applications) {
                 break;
             }
         }
+
         bool runningNow = isProcessRunning(fresh.executable);
+
         if (runningNow && !fresh.running) {
             fresh.running = true;
             fresh.sessionStart = now;
@@ -127,6 +131,12 @@ void refreshDashboardData(std::vector<Application>& applications) {
             fresh.creditedSessionSeconds = 0;
         }
     }
+
+    std::sort(saved.begin(), saved.end(),
+        [](const Application& a, const Application& b) {
+            return _stricmp(a.name.c_str(), b.name.c_str()) < 0;
+        });
+
     applications = std::move(saved);
 }
 
@@ -154,7 +164,7 @@ int main() {
     int addField = 0;
     std::string newName;
     std::string newExecutable;
-    std::string message = "A: add application   S: start/stop   UP/DOWN: select   Q: quit";
+    std::string message;
     double lastRefresh = 0.0;
     double lastStatusCheck = 0.0;
 
@@ -261,11 +271,28 @@ int main() {
             lastStatusCheck = nowSeconds;
         }
 
-        if (tracking && nowSeconds - lastRefresh >= 2.0) {
-            refreshDashboardData(applications);
-            selected = applications.empty() ? 0 : std::clamp(selected, 0, static_cast<int>(applications.size()) - 1);
-            lastRefresh = nowSeconds;
+        
+if (tracking && nowSeconds - lastRefresh >= 2.0) {
+    std::wstring selectedExecutable;
+
+    if (selected >= 0 && selected < static_cast<int>(applications.size())) {
+        selectedExecutable = applications[selected].executable;
+    }
+
+    refreshDashboardData(applications);
+
+    selected = 0;
+
+    for (int i = 0; i < static_cast<int>(applications.size()); i++) {
+       if (_wcsicmp(applications[i].executable.c_str(), selectedExecutable.c_str()) == 0) {
+            selected = i;
+            break;
         }
+    }
+
+    lastRefresh = nowSeconds;
+}
+
 
         int w = GetScreenWidth();
         int h = GetScreenHeight();
@@ -279,10 +306,10 @@ int main() {
 
         DrawCircle(43, 91, 5, tracking ? PT_GREEN : MUTED);
         drawText(tracking ? "Tracking: Active" : "Tracking: Stopped", 58, 79, 18, tracking ? PT_GREEN : TEXT);
-        drawText(tracking ? "Press [S] to stop" : "Press [S] to start", w - 210, 79, 17, MUTED);
+   
 
         int margin = 24;
-        int top = 112;
+        int top = 136;
         int footerH = 48;
         int contentH = h - top - footerH - 28;
         int detailW = std::clamp(static_cast<int>(w * 0.31f), 280, 360);
@@ -310,7 +337,7 @@ std::string summary = std::to_string(applications.size())
     + " applications  |  Total usage: "
     + formatTime(totalUsageSeconds);
 
-drawText(summary.c_str(), 34, 96, 14, MUTED);
+drawText(summary.c_str(), 270, 82, 14, MUTED);
         drawText("Applications", listX + 12, top + 10, 18, TEXT);
         drawLine(listX + 8, top + 38, listX + listW - 8, top + 38);
         drawText("#", listX + 16, top + 48, 16, MUTED);
@@ -374,10 +401,6 @@ drawText(summary.c_str(), 34, 96, 14, MUTED);
         drawText("[R] Reload", 285, footerY + 13, 16, TEXT);
         drawText("[UP/DOWN] Select", 410, footerY + 13, 16, TEXT);
         drawText("[Q] Quit", w - 120, footerY + 13, 16, PT_YELLOW);
-        // Keep status messages in the tracking strip so they never collide with the footer.
-        if (!message.empty() && w > 1050) {
-            drawText(fitText(message, std::max(80, w - 570), 12), 330, 84, 12, MUTED);
-        }
 
         if (addDialog) {
             int boxW = std::min(560, w - 60);
