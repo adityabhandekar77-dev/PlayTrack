@@ -20,14 +20,17 @@
 
 using Clock = std::chrono::steady_clock;
 
-static const Color BG = {12, 15, 17, 255};
-static const Color PANEL = {17, 21, 24, 255};
-static const Color LINE = {151, 159, 161, 255};
-static const Color TEXT = {220, 224, 222, 255};
-static const Color MUTED = {143, 151, 151, 255};
-static const Color PT_GREEN = {105, 207, 112, 255};
-static const Color PT_YELLOW = {225, 199, 93, 255};
-static const Color SELECTED = {34, 42, 45, 255};
+static const Color BG = {10, 13, 17, 255};
+static const Color PANEL = {19, 24, 31, 255};
+static const Color PANEL_ALT = {24, 31, 39, 255};
+static const Color LINE = {45, 56, 67, 255};
+static const Color TEXT = {232, 238, 242, 255};
+static const Color MUTED = {139, 153, 166, 255};
+static const Color PT_GREEN = {111, 224, 157, 255};
+static const Color PT_YELLOW = {255, 194, 92, 255};
+static const Color SELECTED = {29, 49, 51, 255};
+static const Color ACCENT = {76, 210, 163, 255};
+static const Color PT_RED = {255, 124, 124, 255};
 static Font UI_FONT{};
 static bool customFontLoaded = false;
 
@@ -38,6 +41,15 @@ void drawText(const std::string& text, int x, int y, int size = 20, Color color 
     } else {
         DrawTextEx(GetFontDefault(), text.c_str(), position, static_cast<float>(size), 1.0f, color);
     }
+}
+
+void drawCard(Rectangle rectangle, bool accent = false) {
+    DrawRectangleRounded(rectangle, 0.12f, 8, PANEL);
+    DrawRectangleRoundedLinesEx(rectangle, 0.12f, 8, 1.0f, accent ? ACCENT : LINE);
+}
+
+void drawSectionLabel(const std::string& label, int x, int y) {
+    drawText(label, x, y, 13, MUTED);
 }
 
 
@@ -107,14 +119,22 @@ bool pointInRect(Vector2 point, Rectangle rectangle) {
 }
 
 void drawButton(Rectangle rectangle, const char* label, bool highlighted = false) {
-    DrawRectangleRec(rectangle, highlighted ? SELECTED : PANEL);
-    DrawRectangleLinesEx(rectangle, 1.0f, highlighted ? PT_GREEN : LINE);
+    const bool hovered = CheckCollisionPointRec(GetMousePosition(), rectangle);
+    Color fill = highlighted ? SELECTED : PANEL_ALT;
+    Color edge = highlighted ? ACCENT : LINE;
+    Color ink = highlighted ? ACCENT : TEXT;
+    if (hovered) {
+        fill = highlighted ? Color{36, 67, 61, 255} : Color{34, 45, 56, 255};
+        edge = ACCENT;
+        ink = TEXT;
+    }
+    DrawRectangleRounded(rectangle, 0.18f, 8, fill);
+    DrawRectangleRoundedLinesEx(rectangle, 0.18f, 8, 1.0f, edge);
     int textWidth = customFontLoaded
         ? static_cast<int>(MeasureTextEx(UI_FONT, label, 15.0f, 0.6f).x)
         : MeasureText(label, 15);
     drawText(label, static_cast<int>(rectangle.x + (rectangle.width - textWidth) / 2),
-             static_cast<int>(rectangle.y + (rectangle.height - 15) / 2), 15,
-             highlighted ? PT_GREEN : TEXT);
+             static_cast<int>(rectangle.y + (rectangle.height - 15) / 2), 15, ink);
 }
 
 std::string fitText(const std::string& text, int maxWidth, int fontSize) {
@@ -389,11 +409,11 @@ int main() {
             } else if (!addDialog) {
                 int footerH = 48;
                 int footerY = mouseH - footerH - 16;
-                Rectangle addAppButton = {30.0f, static_cast<float>(footerY + 6), 72.0f, 30.0f};
-                Rectangle foldersButton = {110.0f, static_cast<float>(footerY + 6), 94.0f, 30.0f};
-                Rectangle trackingButton = {212.0f, static_cast<float>(footerY + 6), 126.0f, 30.0f};
-                Rectangle reloadButton = {346.0f, static_cast<float>(footerY + 6), 88.0f, 30.0f};
-                Rectangle quitButton = {static_cast<float>(mouseW - 112), static_cast<float>(footerY + 6), 78.0f, 30.0f};
+                Rectangle addAppButton = {30.0f, static_cast<float>(footerY + 6), 92.0f, 30.0f};
+                Rectangle foldersButton = {130.0f, static_cast<float>(footerY + 6), 98.0f, 30.0f};
+                Rectangle trackingButton = {236.0f, static_cast<float>(footerY + 6), 126.0f, 30.0f};
+                Rectangle reloadButton = {370.0f, static_cast<float>(footerY + 6), 88.0f, 30.0f};
+                Rectangle quitButton = {static_cast<float>(mouseW - 106), static_cast<float>(footerY + 6), 74.0f, 30.0f};
                 if (pointInRect(mouse, addAppButton)) {
                     if (isBackgroundTrackerRunning()) {
                         message = "Stop tracking before adding an application.";
@@ -431,13 +451,13 @@ int main() {
                     return 0;
                 } else {
                     int margin = 24;
-                    int top = 136;
+                    int top = 164;
                     int contentH = mouseH - top - footerH - 28;
                     int detailW = std::clamp(static_cast<int>(mouseW * 0.31f), 280, 360);
                     int listW = mouseW - margin * 2 - detailW - 12;
-                    int rowY = top + 82;
-                    int rowH = 36;
-                    int visibleRows = std::max(0, (contentH - 96) / rowH);
+                    int rowY = top + 88;
+                    int rowH = 40;
+                    int visibleRows = std::max(0, (contentH - 110) / rowH);
                     int startIndex = selected >= visibleRows && visibleRows > 0 ? selected - visibleRows + 1 : 0;
                     for (int visible = 0; visible < visibleRows; ++visible) {
                         int i = startIndex + visible;
@@ -497,17 +517,47 @@ if (tracking && nowSeconds - lastRefresh >= 2.0) {
         BeginDrawing();
         ClearBackground(BG);
 
-        DrawRectangleLines(14, 14, w - 28, h - 28, LINE);
-        drawText("PlayTrack", 34, 29, 22, TEXT);
-        drawText(clockText(), w - 165, 33, 17, MUTED);
-        drawLine(24, 62, w - 24, 62);
+        DrawRectangleRounded({12.0f, 12.0f, static_cast<float>(w - 24), static_cast<float>(h - 24)}, 0.035f, 8, BG);
+        drawText("PLAYTRACK", 30, 24, 23, TEXT);
+        drawText("APPLICATION ACTIVITY", 31, 49, 11, MUTED);
+        drawText(clockText(), w - 132, 29, 17, MUTED);
+        DrawCircle(w - 151, 37, 4, tracking ? PT_GREEN : PT_RED);
+        drawLine(24, 68, w - 24, 68, LINE);
 
-        DrawCircle(43, 91, 5, tracking ? PT_GREEN : MUTED);
-        drawText(tracking ? "Tracking: Active" : "Tracking: Stopped", 58, 79, 18, tracking ? PT_GREEN : TEXT);
-   
+        long long totalUsageSeconds = 0;
+        int runningCount = 0;
+        for (const auto& app : applications) {
+            totalUsageSeconds += app.totalSeconds;
+            if (app.running) {
+                ++runningCount;
+                totalUsageSeconds += std::max(0LL, std::chrono::duration_cast<std::chrono::seconds>(
+                    Clock::now() - app.sessionStart).count() - app.creditedSessionSeconds);
+            }
+        }
+
+        int statGap = 12;
+        int statMargin = 24;
+        int statW = (w - statMargin * 2 - statGap * 2) / 3;
+        int statY = 80;
+        int statH = 66;
+        drawCard({static_cast<float>(statMargin), static_cast<float>(statY), static_cast<float>(statW), static_cast<float>(statH)});
+        drawSectionLabel("TRACKING STATUS", statMargin + 15, statY + 10);
+        DrawCircle(statMargin + 19, statY + 43, 4, tracking ? PT_GREEN : PT_RED);
+        drawText(tracking ? "Active" : "Stopped", statMargin + 31, statY + 32, 20, tracking ? PT_GREEN : PT_RED);
+
+        int stat2X = statMargin + statW + statGap;
+        drawCard({static_cast<float>(stat2X), static_cast<float>(statY), static_cast<float>(statW), static_cast<float>(statH)});
+        drawSectionLabel("TOTAL PLAYTIME", stat2X + 15, statY + 10);
+        drawText(formatTime(totalUsageSeconds), stat2X + 15, statY + 31, 20, TEXT);
+
+        int stat3X = stat2X + statW + statGap;
+        drawCard({static_cast<float>(stat3X), static_cast<float>(statY), static_cast<float>(statW), static_cast<float>(statH)});
+        drawSectionLabel("TRACKED APPLICATIONS", stat3X + 15, statY + 10);
+        drawText(std::to_string(applications.size()) + " total  /  " + std::to_string(runningCount) + " running",
+                 stat3X + 15, statY + 32, 19, TEXT);
 
         int margin = 24;
-        int top = 136;
+        int top = 164;
         int footerH = 48;
         int contentH = h - top - footerH - 28;
         int detailW = std::clamp(static_cast<int>(w * 0.31f), 280, 360);
@@ -517,36 +567,19 @@ if (tracking && nowSeconds - lastRefresh >= 2.0) {
         int detailX = listX + listW + gap;
         int footerY = h - footerH - 16;
 
-        DrawRectangleLines(listX, top, listW, contentH, LINE);
-        long long totalUsageSeconds = 0;
+        drawCard({static_cast<float>(listX), static_cast<float>(top), static_cast<float>(listW), static_cast<float>(contentH)});
+        drawCard({static_cast<float>(detailX), static_cast<float>(top), static_cast<float>(detailW), static_cast<float>(contentH)});
+        drawText("Applications", listX + 16, top + 13, 19, TEXT);
+        drawText(std::to_string(applications.size()) + " tracked", listX + listW - 104, top + 17, 12, MUTED);
+        drawLine(listX + 12, top + 43, listX + listW - 12, top + 43, LINE);
+        drawText("APPLICATION", listX + 18, top + 55, 11, MUTED);
+        drawText("PLAYTIME", listX + static_cast<int>(listW * 0.54f), top + 55, 11, MUTED);
+        drawText("STATUS", listX + static_cast<int>(listW * 0.79f), top + 55, 11, MUTED);
+        drawLine(listX + 12, top + 78, listX + listW - 12, top + 78, LINE);
 
-for (const auto& app : applications) {
-    totalUsageSeconds += app.totalSeconds;
-
-    if (app.running) {
-        totalUsageSeconds +=
-            std::chrono::duration_cast<std::chrono::seconds>(
-                std::chrono::steady_clock::now() - app.sessionStart
-            ).count();
-    }
-}
-
-std::string summary = std::to_string(applications.size())
-    + " applications  |  Total usage: "
-    + formatTime(totalUsageSeconds);
-
-drawText(summary.c_str(), 270, 82, 14, MUTED);
-        drawText("Applications", listX + 12, top + 10, 18, TEXT);
-        drawLine(listX + 8, top + 38, listX + listW - 8, top + 38);
-        drawText("#", listX + 16, top + 48, 16, MUTED);
-        drawText("Application", listX + 55, top + 48, 15, MUTED);
-        drawText("Total Time", listX + static_cast<int>(listW * 0.53f), top + 48, 15, MUTED);
-        drawText("Status", listX + static_cast<int>(listW * 0.78f), top + 48, 15, MUTED);
-        drawLine(listX + 8, top + 75, listX + listW - 8, top + 75);
-
-        int rowY = top + 82;
-        int rowH = 36;
-        int visibleRows = std::max(0, (contentH - 96) / rowH);
+        int rowY = top + 88;
+        int rowH = 40;
+        int visibleRows = std::max(0, (contentH - 110) / rowH);
         int startIndex = 0;
         if (selected >= visibleRows && visibleRows > 0) startIndex = selected - visibleRows + 1;
         for (int visible = 0; visible < visibleRows; ++visible) {
@@ -554,52 +587,73 @@ drawText(summary.c_str(), 270, 82, 14, MUTED);
             if (i >= static_cast<int>(applications.size())) break;
             const auto& app = applications[static_cast<std::size_t>(i)];
             int y = rowY + visible * rowH;
-            if (i == selected) DrawRectangle(listX + 4, y - 2, listW - 8, rowH, SELECTED);
-            drawText(std::to_string(i + 1), listX + 16, y + 5, 17, MUTED);
-            int nameMaxWidth = static_cast<int>(listW * 0.30f) - 62;
-            std::string appName = fitText(app.name, std::max(50, nameMaxWidth), 16);
-            drawText(appName, listX + 55, y + 5, 16, i == selected ? TEXT : MUTED);
+            Rectangle rowRect = {static_cast<float>(listX + 8), static_cast<float>(y - 3),
+                                  static_cast<float>(listW - 16), static_cast<float>(rowH - 2)};
+            if (i == selected) {
+                DrawRectangleRounded(rowRect, 0.18f, 8, SELECTED);
+                DrawRectangleRounded({rowRect.x, rowRect.y + 5, 3.0f, rowRect.height - 10}, 0.5f, 4, ACCENT);
+            } else if (CheckCollisionPointRec(GetMousePosition(), rowRect)) {
+                DrawRectangleRounded(rowRect, 0.18f, 8, PANEL_ALT);
+            }
+            drawText(std::to_string(i + 1), listX + 18, y + 7, 13, MUTED);
+            int nameMaxWidth = static_cast<int>(listW * 0.46f) - 45;
+            drawText(fitText(app.name, std::max(55, nameMaxWidth), 15), listX + 49, y + 7, 15,
+                     i == selected ? TEXT : Color{190, 201, 211, 255});
             long long total = app.totalSeconds;
-            if (app.running) total += std::max(0LL, std::chrono::duration_cast<std::chrono::seconds>(Clock::now() - app.sessionStart).count() - app.creditedSessionSeconds);
-            drawText(fitText(formatTime(total), static_cast<int>(listW * 0.22f), 15), listX + static_cast<int>(listW * 0.53f), y + 5, 15, TEXT);
-            drawText(app.running ? "Running" : "Stopped", listX + static_cast<int>(listW * 0.78f), y + 5, 15, app.running ? PT_GREEN : MUTED);
+            if (app.running) total += std::max(0LL, std::chrono::duration_cast<std::chrono::seconds>(
+                Clock::now() - app.sessionStart).count() - app.creditedSessionSeconds);
+            drawText(fitText(formatTime(total), static_cast<int>(listW * 0.23f), 14),
+                     listX + static_cast<int>(listW * 0.54f), y + 8, 14, TEXT);
+            DrawCircle(listX + static_cast<int>(listW * 0.79f) + 3, y + 17, 3, app.running ? PT_GREEN : MUTED);
+            drawText(app.running ? "Running" : "Idle", listX + static_cast<int>(listW * 0.79f) + 13,
+                     y + 8, 13, app.running ? PT_GREEN : MUTED);
         }
-        if (applications.empty()) drawText("No applications yet. Press [A] to add one.", listX + 16, rowY + 8, 16, MUTED);
+        if (applications.empty()) {
+            drawText("Nothing tracked yet", listX + 20, rowY + 12, 17, TEXT);
+            drawText("Use Add App to add an application, or add a scan folder.", listX + 20, rowY + 39, 13, MUTED);
+        }
 
-        DrawRectangleLines(detailX, top, detailW, contentH, LINE);
-        drawText("Selected application", detailX + 14, top + 10, 18, TEXT);
-        drawLine(detailX + 8, top + 38, detailX + detailW - 8, top + 38);
+        drawText("APP DETAILS", detailX + 16, top + 14, 12, MUTED);
+        drawLine(detailX + 12, top + 43, detailX + detailW - 12, top + 43, LINE);
         if (!applications.empty() && selected >= 0 && selected < static_cast<int>(applications.size())) {
             const auto& app = applications[static_cast<std::size_t>(selected)];
-            drawText(fitText(app.name, detailW - 32, 18), detailX + 16, top + 58, 18, PT_YELLOW);
-            drawText("Executable", detailX + 16, top + 100, 15, MUTED);
-            std::string exe = fitText(toUtf8(app.executable), detailW - 32, 15);
-            drawText(exe, detailX + 16, top + 121, 15, TEXT);
+            drawText(fitText(app.name, detailW - 32, 19), detailX + 16, top + 61, 19, PT_YELLOW);
+            drawText("EXECUTABLE", detailX + 16, top + 101, 11, MUTED);
+            drawText(fitText(toUtf8(app.executable), detailW - 32, 13), detailX + 16, top + 120, 13, TEXT);
+
             long long total = app.totalSeconds;
             long long session = 0;
             if (app.running) {
-                session = std::max(0LL, std::chrono::duration_cast<std::chrono::seconds>(Clock::now() - app.sessionStart).count());
+                session = std::max(0LL, std::chrono::duration_cast<std::chrono::seconds>(
+                    Clock::now() - app.sessionStart).count());
                 total += std::max(0LL, session - app.creditedSessionSeconds);
             }
-            drawText("Total time", detailX + 16, top + 165, 16, MUTED);
-            drawText(formatTime(total), detailX + 16, top + 188, 19, TEXT);
-            drawText("Status", detailX + 16, top + 229, 15, MUTED);
-            drawText(app.running ? "Running" : "Not running", detailX + 105, top + 229, 15, app.running ? PT_GREEN : TEXT);
-            drawLine(detailX + 12, top + 265, detailX + detailW - 12, top + 265);
-            drawText("Current session", detailX + 16, top + 280, 16, MUTED);
-            drawText("Elapsed", detailX + 16, top + 309, 16, MUTED);
-            drawText(app.running ? formatTime(session) : "-", detailX + 105, top + 309, 16, TEXT);
+
+            DrawRectangleRounded({static_cast<float>(detailX + 14), static_cast<float>(top + 157),
+                                  static_cast<float>(detailW - 28), 83.0f}, 0.12f, 8, PANEL_ALT);
+            drawSectionLabel("TOTAL PLAYTIME", detailX + 27, top + 169);
+            drawText(formatTime(total), detailX + 27, top + 190, 22, TEXT);
+            drawSectionLabel("CURRENT SESSION", detailX + 16, top + 238);
+            drawText(app.running ? formatTime(session) : "Not active", detailX + 16, top + 258, 18,
+                     app.running ? PT_GREEN : MUTED);
+            drawLine(detailX + 12, top + 291, detailX + detailW - 12, top + 291, LINE);
+            drawText("PROCESS STATUS", detailX + 16, top + 302, 11, MUTED);
+            DrawCircle(detailX + 20, top + 326, 4, app.running ? PT_GREEN : MUTED);
+            drawText(app.running ? "Running now" : "Not running", detailX + 32, top + 317, 15,
+                     app.running ? PT_GREEN : MUTED);
         } else {
-            drawText("Select an application", detailX + 16, top + 62, 16, MUTED);
+            drawText("Select an application", detailX + 16, top + 65, 16, TEXT);
+            drawText("Its playtime and process", detailX + 16, top + 92, 13, MUTED);
+            drawText("status will appear here.", detailX + 16, top + 112, 13, MUTED);
         }
 
-        drawLine(24, footerY, w - 24, footerY);
-        drawButton({30.0f, static_cast<float>(footerY + 6), 72.0f, 30.0f}, "Add", true);
-        drawButton({110.0f, static_cast<float>(footerY + 6), 94.0f, 30.0f}, "Folders", true);
-        drawButton({212.0f, static_cast<float>(footerY + 6), 126.0f, 30.0f}, tracking ? "Stop Tracking" : "Start Tracking");
-        drawButton({346.0f, static_cast<float>(footerY + 6), 88.0f, 30.0f}, "Reload");
-        drawText("Click an app to select  |  UP/DOWN: Select", 452, footerY + 13, 14, MUTED);
-        drawButton({static_cast<float>(w - 112), static_cast<float>(footerY + 6), 78.0f, 30.0f}, "Quit", true);
+        drawLine(24, footerY, w - 24, footerY, LINE);
+        drawButton({30.0f, static_cast<float>(footerY + 6), 92.0f, 30.0f}, "+ Add App", true);
+        drawButton({130.0f, static_cast<float>(footerY + 6), 98.0f, 30.0f}, "Folders", false);
+        drawButton({236.0f, static_cast<float>(footerY + 6), 126.0f, 30.0f}, tracking ? "Stop Tracking" : "Start Tracking", tracking);
+        drawButton({370.0f, static_cast<float>(footerY + 6), 88.0f, 30.0f}, "Reload", false);
+        drawText("Click a row to inspect  ·  ↑/↓ select  ·  F folders", 474, footerY + 14, 12, MUTED);
+        drawButton({static_cast<float>(w - 106), static_cast<float>(footerY + 6), 74.0f, 30.0f}, "Quit", false);
 
         if (folderManager) {
             DrawRectangle(0, 0, w, h, Fade(BLACK, 0.78f));
