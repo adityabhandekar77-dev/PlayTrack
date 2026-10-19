@@ -8,6 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(PlayTrack
     src/main.cpp
+    src/folder_picker.cpp
     src/process_detector.cpp
     src/tracking_engine.cpp
     src/app_discovery.cpp

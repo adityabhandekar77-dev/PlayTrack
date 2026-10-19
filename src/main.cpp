@@ -1,5 +1,6 @@
 #include "tracking_engine.h"
 #include "process_detector.h"
+#include "app_config.h"
 
 #include <raylib.h>
 
@@ -8,10 +9,13 @@
 #define NOUSER
 #include <windows.h>
 
+#include "folder_picker.h"
+
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <string>
+#include <system_error>
 #include <vector>
 
 using Clock = std::chrono::steady_clock;
@@ -34,6 +38,83 @@ void drawText(const std::string& text, int x, int y, int size = 20, Color color 
     } else {
         DrawTextEx(GetFontDefault(), text.c_str(), position, static_cast<float>(size), 1.0f, color);
     }
+}
+
+
+bool addScanFolderFromPicker(AppConfig& config, int& selectedFolder, std::string& message) {
+    std::filesystem::path folder = chooseFolderInExplorer(GetWindowHandle());
+    if (folder.empty()) {
+        message = "Folder selection cancelled.";
+        return false;
+    }
+
+    folder = folder.lexically_normal();
+    std::error_code ec;
+    if (!std::filesystem::exists(folder, ec) || !std::filesystem::is_directory(folder, ec)) {
+        message = "Please select an existing folder.";
+        return false;
+    }
+
+    for (const auto& existing : config.scanFolders) {
+        auto a = existing.lexically_normal().wstring();
+        auto b = folder.wstring();
+        if (_wcsicmp(a.c_str(), b.c_str()) == 0) {
+            message = "That folder is already configured.";
+            return false;
+        }
+    }
+
+    config.scanFolders.push_back(folder);
+    if (saveAppConfig("config.json", config)) {
+        selectedFolder = static_cast<int>(config.scanFolders.size()) - 1;
+        message = "Folder added. The tracker will scan it shortly.";
+        return true;
+    }
+
+    config.scanFolders.pop_back();
+    message = "Could not save config.json.";
+    return false;
+}
+
+bool removeSelectedScanFolder(AppConfig& config, int& selectedFolder, std::string& message) {
+    if (selectedFolder < 0 || selectedFolder >= static_cast<int>(config.scanFolders.size())) {
+        message = "Select a folder to remove.";
+        return false;
+    }
+
+    const auto selectedPath = config.scanFolders[static_cast<std::size_t>(selectedFolder)].lexically_normal().wstring();
+    const auto requiredPath = std::filesystem::path("tracked-apps").lexically_normal().wstring();
+    if (_wcsicmp(selectedPath.c_str(), requiredPath.c_str()) == 0) {
+        message = "tracked-apps is required and cannot be removed.";
+        return false;
+    }
+
+    auto removed = config.scanFolders[static_cast<std::size_t>(selectedFolder)];
+    config.scanFolders.erase(config.scanFolders.begin() + selectedFolder);
+    if (saveAppConfig("config.json", config)) {
+        selectedFolder = config.scanFolders.empty() ? 0 : std::min(selectedFolder, static_cast<int>(config.scanFolders.size()) - 1);
+        message = "Folder removed from scanning configuration.";
+        return true;
+    }
+
+    config.scanFolders.insert(config.scanFolders.begin() + selectedFolder, removed);
+    message = "Could not save config.json.";
+    return false;
+}
+
+bool pointInRect(Vector2 point, Rectangle rectangle) {
+    return CheckCollisionPointRec(point, rectangle);
+}
+
+void drawButton(Rectangle rectangle, const char* label, bool highlighted = false) {
+    DrawRectangleRec(rectangle, highlighted ? SELECTED : PANEL);
+    DrawRectangleLinesEx(rectangle, 1.0f, highlighted ? PT_GREEN : LINE);
+    int textWidth = customFontLoaded
+        ? static_cast<int>(MeasureTextEx(UI_FONT, label, 15.0f, 0.6f).x)
+        : MeasureText(label, 15);
+    drawText(label, static_cast<int>(rectangle.x + (rectangle.width - textWidth) / 2),
+             static_cast<int>(rectangle.y + (rectangle.height - 15) / 2), 15,
+             highlighted ? PT_GREEN : TEXT);
 }
 
 std::string fitText(const std::string& text, int maxWidth, int fontSize) {
@@ -161,6 +242,9 @@ int main() {
     int selected = 0;
     bool tracking = isBackgroundTrackerRunning();
     bool addDialog = false;
+    bool folderManager = false;
+    int selectedFolder = 0;
+    AppConfig appConfig = loadAppConfig("config.json");
     int addField = 0;
     std::string newName;
     std::string newExecutable;
@@ -183,7 +267,20 @@ int main() {
         (void)dt;
         int key = GetKeyPressed();
         while (key > 0) {
-            if (addDialog) {
+            if (folderManager) {
+                if (key == KEY_ESCAPE || key == KEY_F) {
+                    folderManager = false;
+                    message = "Folder manager closed.";
+                } else if (key == KEY_UP && !appConfig.scanFolders.empty()) {
+                    selectedFolder = (selectedFolder - 1 + static_cast<int>(appConfig.scanFolders.size())) % static_cast<int>(appConfig.scanFolders.size());
+                } else if (key == KEY_DOWN && !appConfig.scanFolders.empty()) {
+                    selectedFolder = (selectedFolder + 1) % static_cast<int>(appConfig.scanFolders.size());
+                } else if (key == KEY_A) {
+                    addScanFolderFromPicker(appConfig, selectedFolder, message);
+                } else if (key == KEY_DELETE || key == KEY_BACKSPACE) {
+                    removeSelectedScanFolder(appConfig, selectedFolder, message);
+                }
+            } else if (addDialog) {
                 if (key == KEY_TAB) addField = 1 - addField;
                 else if (key == KEY_ESCAPE) { addDialog = false; newName.clear(); newExecutable.clear(); }
                 else if (key == KEY_BACKSPACE) {
@@ -218,6 +315,10 @@ int main() {
                     selected = (selected - 1 + static_cast<int>(applications.size())) % static_cast<int>(applications.size());
                 } else if (key == KEY_DOWN && !applications.empty()) {
                     selected = (selected + 1) % static_cast<int>(applications.size());
+                } else if (key == KEY_F) {
+                    folderManager = true;
+                    selectedFolder = appConfig.scanFolders.empty() ? 0 : std::clamp(selectedFolder, 0, static_cast<int>(appConfig.scanFolders.size()) - 1);
+                    message = "Manage scan folders.";
                 } else if (key == KEY_A) {
                     if (isBackgroundTrackerRunning()) {
                         message = "Stop tracking before adding an application.";
@@ -252,6 +353,103 @@ int main() {
                 }
             }
             key = GetKeyPressed();
+        }
+
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            Vector2 mouse = GetMousePosition();
+            int mouseW = GetScreenWidth();
+            int mouseH = GetScreenHeight();
+            if (folderManager) {
+                int boxW = std::min(760, mouseW - 60);
+                int boxH = std::min(470, mouseH - 60);
+                int boxX = (mouseW - boxW) / 2;
+                int boxY = (mouseH - boxH) / 2;
+                Rectangle addButton = {static_cast<float>(boxX + 20), static_cast<float>(boxY + boxH - 66), 142.0f, 34.0f};
+                Rectangle removeButton = {static_cast<float>(boxX + 174), static_cast<float>(boxY + boxH - 66), 174.0f, 34.0f};
+                Rectangle closeButton = {static_cast<float>(boxX + boxW - 132), static_cast<float>(boxY + boxH - 66), 112.0f, 34.0f};
+                if (pointInRect(mouse, addButton)) {
+                    addScanFolderFromPicker(appConfig, selectedFolder, message);
+                } else if (pointInRect(mouse, removeButton)) {
+                    removeSelectedScanFolder(appConfig, selectedFolder, message);
+                } else if (pointInRect(mouse, closeButton)) {
+                    folderManager = false;
+                    message = "Folder manager closed.";
+                } else {
+                    int listY = boxY + 90;
+                    int maxRows = std::max(1, (boxH - 190) / 29);
+                    int first = selectedFolder >= maxRows ? selectedFolder - maxRows + 1 : 0;
+                    for (int i = first; i < static_cast<int>(appConfig.scanFolders.size()) && i < first + maxRows; ++i) {
+                        Rectangle row = {static_cast<float>(boxX + 12), static_cast<float>(listY + (i - first) * 29 - 2), static_cast<float>(boxW - 24), 26.0f};
+                        if (pointInRect(mouse, row)) {
+                            selectedFolder = i;
+                            break;
+                        }
+                    }
+                }
+            } else if (!addDialog) {
+                int footerH = 48;
+                int footerY = mouseH - footerH - 16;
+                Rectangle addAppButton = {30.0f, static_cast<float>(footerY + 6), 72.0f, 30.0f};
+                Rectangle foldersButton = {110.0f, static_cast<float>(footerY + 6), 94.0f, 30.0f};
+                Rectangle trackingButton = {212.0f, static_cast<float>(footerY + 6), 126.0f, 30.0f};
+                Rectangle reloadButton = {346.0f, static_cast<float>(footerY + 6), 88.0f, 30.0f};
+                Rectangle quitButton = {static_cast<float>(mouseW - 112), static_cast<float>(footerY + 6), 78.0f, 30.0f};
+                if (pointInRect(mouse, addAppButton)) {
+                    if (isBackgroundTrackerRunning()) {
+                        message = "Stop tracking before adding an application.";
+                    } else {
+                        addDialog = true;
+                        addField = 0;
+                        newName.clear();
+                        newExecutable.clear();
+                        message = "Type a name and executable; TAB switches fields.";
+                    }
+                } else if (pointInRect(mouse, foldersButton)) {
+                    folderManager = true;
+                    selectedFolder = appConfig.scanFolders.empty() ? 0 : std::clamp(selectedFolder, 0, static_cast<int>(appConfig.scanFolders.size()) - 1);
+                    message = "Manage scan folders.";
+                } else if (pointInRect(mouse, trackingButton)) {
+                    if (isBackgroundTrackerRunning()) {
+                        if (stopBackgroundTracker()) {
+                            tracking = false;
+                            message = "Stop requested. Saving tracked time...";
+                        } else message = "Could not signal the background tracker.";
+                    } else if (startBackgroundTracker()) {
+                        tracking = true;
+                        message = "Background tracker started.";
+                    } else {
+                        tracking = false;
+                        message = "Could not start tracker. Check PlayTrackTracker.exe.";
+                    }
+                } else if (pointInRect(mouse, reloadButton)) {
+                    if (!isBackgroundTrackerRunning()) applications = loadApplications();
+                    selected = applications.empty() ? 0 : std::clamp(selected, 0, static_cast<int>(applications.size()) - 1);
+                    message = tracking ? "Tracking refreshes automatically." : "Data reloaded from playtime.json.";
+                } else if (pointInRect(mouse, quitButton)) {
+                    if (!isBackgroundTrackerRunning()) saveApplications(applications);
+                    CloseWindow();
+                    return 0;
+                } else {
+                    int margin = 24;
+                    int top = 136;
+                    int contentH = mouseH - top - footerH - 28;
+                    int detailW = std::clamp(static_cast<int>(mouseW * 0.31f), 280, 360);
+                    int listW = mouseW - margin * 2 - detailW - 12;
+                    int rowY = top + 82;
+                    int rowH = 36;
+                    int visibleRows = std::max(0, (contentH - 96) / rowH);
+                    int startIndex = selected >= visibleRows && visibleRows > 0 ? selected - visibleRows + 1 : 0;
+                    for (int visible = 0; visible < visibleRows; ++visible) {
+                        int i = startIndex + visible;
+                        if (i >= static_cast<int>(applications.size())) break;
+                        Rectangle row = {static_cast<float>(margin + 4), static_cast<float>(rowY + visible * rowH - 2), static_cast<float>(listW - 8), static_cast<float>(rowH)};
+                        if (pointInRect(mouse, row)) {
+                            selected = i;
+                            break;
+                        }
+                    }
+                }
+            }
         }
 
         if (addDialog) {
@@ -396,11 +594,43 @@ drawText(summary.c_str(), 270, 82, 14, MUTED);
         }
 
         drawLine(24, footerY, w - 24, footerY);
-        drawText("[A] Add", 36, footerY + 13, 16, PT_YELLOW);
-        drawText("[S] Start/Stop", 132, footerY + 13, 16, TEXT);
-        drawText("[R] Reload", 285, footerY + 13, 16, TEXT);
-        drawText("[UP/DOWN] Select", 410, footerY + 13, 16, TEXT);
-        drawText("[Q] Quit", w - 120, footerY + 13, 16, PT_YELLOW);
+        drawButton({30.0f, static_cast<float>(footerY + 6), 72.0f, 30.0f}, "Add", true);
+        drawButton({110.0f, static_cast<float>(footerY + 6), 94.0f, 30.0f}, "Folders", true);
+        drawButton({212.0f, static_cast<float>(footerY + 6), 126.0f, 30.0f}, tracking ? "Stop Tracking" : "Start Tracking");
+        drawButton({346.0f, static_cast<float>(footerY + 6), 88.0f, 30.0f}, "Reload");
+        drawText("Click an app to select  |  UP/DOWN: Select", 452, footerY + 13, 14, MUTED);
+        drawButton({static_cast<float>(w - 112), static_cast<float>(footerY + 6), 78.0f, 30.0f}, "Quit", true);
+
+        if (folderManager) {
+            DrawRectangle(0, 0, w, h, Fade(BLACK, 0.78f));
+            int boxW = std::min(760, w - 60);
+            int boxH = std::min(470, h - 60);
+            int boxX = (w - boxW) / 2;
+            int boxY = (h - boxH) / 2;
+            DrawRectangle(boxX, boxY, boxW, boxH, PANEL);
+            DrawRectangleLines(boxX, boxY, boxW, boxH, LINE);
+            drawText("Manage scan folders", boxX + 20, boxY + 16, 21, TEXT);
+            drawText("Choose folders for automatic application discovery", boxX + 20, boxY + 48, 14, MUTED);
+            drawLine(boxX + 16, boxY + 76, boxX + boxW - 16, boxY + 76);
+            int listY = boxY + 90;
+            int maxRows = std::max(1, (boxH - 190) / 29);
+            int first = selectedFolder >= maxRows ? selectedFolder - maxRows + 1 : 0;
+            for (int i = first; i < static_cast<int>(appConfig.scanFolders.size()) && i < first + maxRows; ++i) {
+                int y = listY + (i - first) * 29;
+                if (i == selectedFolder) DrawRectangle(boxX + 12, y - 2, boxW - 24, 26, SELECTED);
+                drawText(i == selectedFolder ? ">" : " ", boxX + 20, y + 2, 15, PT_GREEN);
+                drawText(fitText(appConfig.scanFolders[static_cast<std::size_t>(i)].string(), boxW - 65, 15), boxX + 42, y + 2, 15, i == selectedFolder ? TEXT : MUTED);
+            }
+            if (appConfig.scanFolders.empty()) drawText("No configured folders.", boxX + 22, listY + 5, 15, MUTED);
+            drawLine(boxX + 16, boxY + boxH - 92, boxX + boxW - 16, boxY + boxH - 92);
+            Rectangle addButton = {static_cast<float>(boxX + 20), static_cast<float>(boxY + boxH - 66), 142.0f, 34.0f};
+            Rectangle removeButton = {static_cast<float>(boxX + 174), static_cast<float>(boxY + boxH - 66), 174.0f, 34.0f};
+            Rectangle closeButton = {static_cast<float>(boxX + boxW - 132), static_cast<float>(boxY + boxH - 66), 112.0f, 34.0f};
+            drawButton(addButton, "+ Add Folder", true);
+            drawButton(removeButton, "Remove Selected");
+            drawButton(closeButton, "Close");
+            drawText("Click a folder to select it. Only folders can be chosen.", boxX + 20, boxY + boxH - 25, 13, MUTED);
+        }
 
         if (addDialog) {
             int boxW = std::min(560, w - 60);

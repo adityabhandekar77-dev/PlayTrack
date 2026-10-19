@@ -1,16 +1,24 @@
-PlayTrack clean background-tracker dashboard integration
+PlayTrack font consistency + live scan-folder refresh
 
-1. Keep a backup of your current src/main.cpp.
-2. Replace src/main.cpp with the included src/main.cpp.
-3. Keep your current CMakeLists.txt; it already builds PlayTrackTracker with -municode.
-4. Build from MSYS2 UCRT64 in /c/Code/PlayTrack:
-   cmake -S . -B build
-   cmake --build build
-5. Make sure build/PlayTrack.exe and build/PlayTrackTracker.exe are in the same folder.
-6. Run build/PlayTrack.exe. Press S to start/stop the background tracker.
+Copy these files to C:\Code\PlayTrack, preserving folders:
+- src/main.cpp
+- src/folder_picker.cpp
+- src/tracker_main.cpp
+- src/app_config.cpp
+- include/folder_picker.h
+- include/app_config.h
+- CMakeLists.txt
 
-Behavior:
-- Closing the dashboard does not stop the tracker.
-- Dashboard polls saved totals and process status while the tracker is active.
-- To avoid concurrent edits to playtime.json, add applications only while tracking is stopped.
-- This source has not been compiled on your machine; build and test before committing.
+What changed:
+- Dashboard and folder-manager buttons now use the same drawText/font path.
+- Background tracker reloads config.json at each scan interval and rebuilds its scan-folder list.
+- Newly discovered executables are merged into playtime.json and then picked up by the dashboard refresh.
+- Corrected config JSON newline output and removed redundant NOMINMAX define.
+
+Before copying, back up the listed source files. Do not replace config.json or playtime.json.
+Build with:
+  cd /c/Code/PlayTrack
+  cmake -S . -B build
+  cmake --build build
+
+Note: the source has not been compiled in the user's Windows environment; verify the build before running.

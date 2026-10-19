@@ -1,4 +1,3 @@
-
 #ifndef APP_CONFIG_H
 #define APP_CONFIG_H
 
@@ -11,5 +10,6 @@ struct AppConfig {
 };
 
 AppConfig loadAppConfig(const std::filesystem::path& configPath);
+bool saveAppConfig(const std::filesystem::path& configPath, const AppConfig& config);
 
 #endif
