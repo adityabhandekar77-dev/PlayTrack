@@ -47,6 +47,11 @@ static bool isHelperExecutable(const std::filesystem::path& path) {
         L"bb-gpu-capabilities",
         L"bb-probe",
         L"start_protected_game"
+        L"language selector",
+L"digitalartwork_minisoundtrack",
+L"shadnet",
+L"elden ring adventure guide",
+L"elden ring digital artbook",
     };
 
     for (const auto& excluded : excludedNames) {
