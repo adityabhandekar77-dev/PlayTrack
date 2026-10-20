@@ -1,6 +1,7 @@
 #include "tracking_engine.h"
 #include "app_discovery.h"
 #include "app_config.h"
+#include "data_paths.h"
 
 #define WIN32_LEAN_AND_MEAN
 #define NOGDI
@@ -40,8 +41,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
 
     std::filesystem::path appDirectory(modulePath);
     appDirectory = appDirectory.parent_path();
-    if (appDirectory.filename() == L"build") appDirectory = appDirectory.parent_path();
-    SetCurrentDirectoryW(appDirectory.c_str());
+    if (appDirectory.filename() == L"build") {
+        appDirectory = appDirectory.parent_path();
+    }
+
+    if (!initializeDataDirectory(appDirectory)) return 4;
+
+    const auto dataDirectory = getDataDirectory();
+    if (dataDirectory.empty() ||
+        !SetCurrentDirectoryW(dataDirectory.c_str())) return 4;
 
     HANDLE instanceMutex = CreateMutexW(nullptr, TRUE, L"Local\\PlayTrack_Tracker_Instance");
     if (!instanceMutex) return 2;
@@ -58,10 +66,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     }
 
     std::error_code folderError;
-    std::filesystem::create_directories(appDirectory / L"tracked-apps", folderError);
+    std::filesystem::create_directories(dataDirectory / L"tracked-apps", folderError);
 
-    AppConfig config = loadAppConfig(appDirectory / L"config.json");
-    auto scanFolders = resolveScanFolders(appDirectory, config);
+    AppConfig config = loadAppConfig(dataDirectory / L"config.json");
+    auto scanFolders = resolveScanFolders(dataDirectory, config);
     std::vector<Application> applications = loadApplications();
     auto discovered = discoverApplications(scanFolders);
     mergeDiscoveredApplications(applications, discovered);
@@ -78,8 +86,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
 
         if (now - lastDiscovery >= std::chrono::seconds(config.scanIntervalSeconds)) {
             // Reload config so folders added or removed in the dashboard take effect.
-            config = loadAppConfig(appDirectory / L"config.json");
-            scanFolders = resolveScanFolders(appDirectory, config);
+            config = loadAppConfig(dataDirectory / L"config.json");
+            scanFolders = resolveScanFolders(dataDirectory, config);
             auto newlyDiscovered = discoverApplications(scanFolders);
             mergeDiscoveredApplications(applications, newlyDiscovered);
             saveApplications(applications);

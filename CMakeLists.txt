@@ -9,10 +9,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_executable(PlayTrack
     src/main.cpp
     src/folder_picker.cpp
+    src/startup_manager.cpp
+    src/app_config.cpp
+    src/data_paths.cpp
     src/process_detector.cpp
     src/tracking_engine.cpp
-    src/app_discovery.cpp
-    src/app_config.cpp
 )
 
 target_include_directories(PlayTrack PRIVATE
@@ -40,6 +41,7 @@ add_executable(PlayTrackTracker WIN32
     src/tracking_engine.cpp
     src/app_discovery.cpp
     src/app_config.cpp
+    src/data_paths.cpp
 )
 
 target_compile_options(PlayTrackTracker PRIVATE -municode)

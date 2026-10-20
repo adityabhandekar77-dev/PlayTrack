@@ -1,17 +1,22 @@
-#include "tracking_engine.h"
-#include "process_detector.h"
-#include "app_config.h"
-
-#include <raylib.h>
-
 #define WIN32_LEAN_AND_MEAN
 #define NOGDI
 #define NOUSER
 #include <windows.h>
+#include "tracking_engine.h"
+
+#include "process_detector.h"
+#include "app_config.h"
+#include "data_paths.h"
+
+#include <raylib.h>
+
+
 
 #include "folder_picker.h"
+#include "startup_manager.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <string>
@@ -244,20 +249,28 @@ void refreshDashboardData(std::vector<Application>& applications) {
 
 
 int main() {
-
-        wchar_t modulePath[MAX_PATH]{};
+    wchar_t modulePath[MAX_PATH]{};
     DWORD length = GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
+    if (length == 0 || length >= MAX_PATH) return 1;
 
-    if (length > 0 && length < MAX_PATH) {
-        std::filesystem::path appDirectory(modulePath);
+    std::filesystem::path appDirectory(modulePath);
+    appDirectory = appDirectory.parent_path();
+    if (appDirectory.filename() == L"build") {
         appDirectory = appDirectory.parent_path();
-
-        if (appDirectory.filename() == L"build") {
-            appDirectory = appDirectory.parent_path();
-        }
-
-        SetCurrentDirectoryW(appDirectory.c_str());
     }
+
+    if (!initializeDataDirectory(appDirectory)) {
+    return 1;
+}
+
+const auto dataDirectory = getDataDirectory();
+
+if (dataDirectory.empty() ||
+    !SetCurrentDirectoryW(dataDirectory.c_str())) {
+    return 1;
+}
+
+    
     std::vector<Application> applications = loadApplications();
     int selected = 0;
     bool tracking = isBackgroundTrackerRunning();
@@ -271,6 +284,7 @@ int main() {
     std::string message;
     double lastRefresh = 0.0;
     double lastStatusCheck = 0.0;
+    float selectionHighlightY = -1.0f;
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT);
     InitWindow(1100, 680, "PlayTrack");
@@ -282,9 +296,23 @@ int main() {
         customFontLoaded = UI_FONT.texture.id != 0;
     }
 
+    if (isBackgroundTrackerRunning()) {
+        tracking = true;
+        if (!registerTrackerStartup()) {
+            message = "Tracker is running, but Windows startup could not be configured.";
+        }
+    } else if (startBackgroundTracker()) {
+        tracking = true;
+        message = registerTrackerStartup()
+            ? "Tracker started automatically. Windows startup enabled."
+            : "Tracker started, but Windows startup could not be configured.";
+    } else {
+        tracking = false;
+        message = "Dashboard ready. Press S to start the tracker.";
+    }
+
     while (!WindowShouldClose()) {
-        float dt = GetFrameTime();
-        (void)dt;
+        float dt = std::min(GetFrameTime(), 0.05f);
         int key = GetKeyPressed();
         while (key > 0) {
             if (folderManager) {
@@ -360,7 +388,9 @@ int main() {
                     } else {
                         if (startBackgroundTracker()) {
                             tracking = true;
-                            message = "Background tracker started.";
+                            message = registerTrackerStartup()
+                                ? "Tracker started. Windows startup enabled."
+                                : "Tracker started, but Windows startup could not be configured.";
                         } else {
                             tracking = false;
                             message = "Could not start tracker. Check PlayTrackTracker.exe.";
@@ -436,7 +466,9 @@ int main() {
                         } else message = "Could not signal the background tracker.";
                     } else if (startBackgroundTracker()) {
                         tracking = true;
-                        message = "Background tracker started.";
+                        message = registerTrackerStartup()
+                            ? "Tracker started. Windows startup enabled."
+                            : "Tracker started, but Windows startup could not be configured.";
                     } else {
                         tracking = false;
                         message = "Could not start tracker. Check PlayTrackTracker.exe.";
@@ -582,6 +614,23 @@ if (tracking && nowSeconds - lastRefresh >= 2.0) {
         int visibleRows = std::max(0, (contentH - 110) / rowH);
         int startIndex = 0;
         if (selected >= visibleRows && visibleRows > 0) startIndex = selected - visibleRows + 1;
+
+        if (visibleRows > 0 && selected >= startIndex && selected < startIndex + visibleRows &&
+            selected < static_cast<int>(applications.size())) {
+            const float targetY = static_cast<float>(rowY + (selected - startIndex) * rowH - 3);
+            if (selectionHighlightY < 0.0f) selectionHighlightY = targetY;
+            const float easing = 1.0f - std::exp(-18.0f * dt);
+            selectionHighlightY += (targetY - selectionHighlightY) * easing;
+            if (std::abs(selectionHighlightY - targetY) < 0.35f) selectionHighlightY = targetY;
+            Rectangle animatedSelection = {static_cast<float>(listX + 8), selectionHighlightY,
+                                            static_cast<float>(listW - 16), static_cast<float>(rowH - 2)};
+            DrawRectangleRounded(animatedSelection, 0.18f, 8, SELECTED);
+            DrawRectangleRounded({animatedSelection.x, animatedSelection.y + 5, 3.0f,
+                                  animatedSelection.height - 10}, 0.5f, 4, ACCENT);
+        } else {
+            selectionHighlightY = -1.0f;
+        }
+
         for (int visible = 0; visible < visibleRows; ++visible) {
             int i = startIndex + visible;
             if (i >= static_cast<int>(applications.size())) break;
@@ -589,10 +638,7 @@ if (tracking && nowSeconds - lastRefresh >= 2.0) {
             int y = rowY + visible * rowH;
             Rectangle rowRect = {static_cast<float>(listX + 8), static_cast<float>(y - 3),
                                   static_cast<float>(listW - 16), static_cast<float>(rowH - 2)};
-            if (i == selected) {
-                DrawRectangleRounded(rowRect, 0.18f, 8, SELECTED);
-                DrawRectangleRounded({rowRect.x, rowRect.y + 5, 3.0f, rowRect.height - 10}, 0.5f, 4, ACCENT);
-            } else if (CheckCollisionPointRec(GetMousePosition(), rowRect)) {
+            if (i != selected && CheckCollisionPointRec(GetMousePosition(), rowRect)) {
                 DrawRectangleRounded(rowRect, 0.18f, 8, PANEL_ALT);
             }
             drawText(std::to_string(i + 1), listX + 18, y + 7, 13, MUTED);
@@ -652,7 +698,8 @@ if (tracking && nowSeconds - lastRefresh >= 2.0) {
         drawButton({130.0f, static_cast<float>(footerY + 6), 98.0f, 30.0f}, "Folders", false);
         drawButton({236.0f, static_cast<float>(footerY + 6), 126.0f, 30.0f}, tracking ? "Stop Tracking" : "Start Tracking", tracking);
         drawButton({370.0f, static_cast<float>(footerY + 6), 88.0f, 30.0f}, "Reload", false);
-        drawText("Click a row to inspect  ·  ↑/↓ select  ·  F folders", 474, footerY + 14, 12, MUTED);
+        const std::string footerStatus = message.empty() ? "Select an application to view its details" : message;
+        drawText(fitText(footerStatus, std::max(120, w - 610), 12), 474, footerY + 14, 12, MUTED);
         drawButton({static_cast<float>(w - 106), static_cast<float>(footerY + 6), 74.0f, 30.0f}, "Quit", false);
 
         if (folderManager) {

@@ -1,24 +1,29 @@
-PlayTrack font consistency + live scan-folder refresh
+# PlayTrack first-run startup integration (draft)
 
-Copy these files to C:\Code\PlayTrack, preserving folders:
-- src/main.cpp
-- src/folder_picker.cpp
-- src/tracker_main.cpp
-- src/app_config.cpp
-- include/folder_picker.h
-- include/app_config.h
-- CMakeLists.txt
+This package adds automatic tracker launch and Windows startup registration. It is not yet a verified release installer.
 
-What changed:
-- Dashboard and folder-manager buttons now use the same drawText/font path.
-- Background tracker reloads config.json at each scan interval and rebuilds its scan-folder list.
-- Newly discovered executables are merged into playtime.json and then picked up by the dashboard refresh.
-- Corrected config JSON newline output and removed redundant NOMINMAX define.
+## Intended behavior
+- The user installs PlayTrack with the Inno Setup installer and gets one desktop shortcut (optional in the installer task; Start Menu shortcut is always created).
+- Opening PlayTrack launches `PlayTrackTracker.exe` if it is not already running.
+- When the dashboard successfully starts the tracker, it creates/updates `PlayTrack Tracker.lnk` in the current Windows user's Startup folder.
+- The tracker runs hidden and can continue after the dashboard closes. `S` remains the dashboard start/stop toggle. Stopping it manually does not remove the Startup shortcut, so it starts again at the next sign-in.
 
-Before copying, back up the listed source files. Do not replace config.json or playtime.json.
-Build with:
-  cd /c/Code/PlayTrack
-  cmake -S . -B build
-  cmake --build build
+## Apply source changes
+1. Back up `src/main.cpp` and `CMakeLists.txt`.
+2. Replace `src/main.cpp` with `PlayTrack-main-auto-start.cpp` (rename to `main.cpp`).
+3. Copy `startup_manager.cpp` to `src/startup_manager.cpp`, and `startup_manager.h` to `include/startup_manager.h`.
+4. Add `src/startup_manager.cpp` to the `PlayTrack` target only in `CMakeLists.txt`. The supplied `CMakeLists-PlayTrack-startup.txt` shows the intended addition; merge it into your actual current file rather than overwriting unrelated changes.
+5. Build and test before committing.
 
-Note: the source has not been compiled in the user's Windows environment; verify the build before running.
+## Installer template
+`PlayTrack-Setup.iss` is an Inno Setup template. It expects `release\PlayTrack.exe`, `release\PlayTrackTracker.exe`, and any runtime DLLs required by the build. Install Inno Setup to compile it. Keep personal `config.json`, `playtime.json`, backups, and `.lnk` files out of `release`.
+
+## Required tests before calling this 1.0.0
+- Build with your current MSYS2/Raylib toolchain.
+- Verify launch from installed desktop shortcut, including a path with spaces.
+- Verify tracker starts once, not twice, and dashboard S toggles correctly.
+- Sign out/in or reboot and verify tracker starts without showing a console window.
+- Verify uninstall removes the installed app and shortcuts but does not delete user playtime/config data.
+- Test paths with non-ASCII characters if those are intended to be supported.
+
+This draft has not been compiled or run on the user's Windows machine. The installer is a starting template, not a validated release build.
