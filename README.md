@@ -2,24 +2,40 @@
 
 **A lightweight Windows application and game playtime tracker built with C++17 and Raylib.**
 
-Track how much time you spend using your favorite applications and games with PlayTrack's desktop dashboard and background tracking system.
+PlayTrack tracks time spent in selected Windows applications and games through a desktop dashboard and background tracking system.
 
 [**Download PlayTrack v1.0.0**](https://github.com/adityabhandekar77-dev/PlayTrack/releases/tag/v1.0.0)
 
-## Features
-
-- **Application Tracking** — Track time spent in selected Windows applications and games.
-- **Automatic Process Detection** — Detect running applications and update their tracked time.
-- **Background Tracking** — Run the tracker separately from the dashboard.
-- **Persistent Playtime Records** — Save accumulated playtime locally between sessions.
-- **Desktop Dashboard** — View your tracked applications and recorded time through a Raylib interface.
-- **Application Management** — Add applications and manage which folders are scanned for executables.
-- **Windows Startup Integration** — Configure tracking to start automatically when you sign in to Windows.
-- **Windows Installer** — Install PlayTrack using a standalone installer without setting up the development toolchain.
-
 ## Screenshots
 
-*Screenshots of the PlayTrack dashboard will be added here.*
+### Dashboard and Live Tracking
+
+View tracked applications, total playtime, running status, and individual application details.
+
+![PlayTrack dashboard showing active tracking and application playtime](assets/screenshots/live-tracking.png)
+
+### Scan Folder Management
+
+Choose folders for automatic application discovery and manage the directories PlayTrack scans.
+
+![PlayTrack scan folder manager](assets/screenshots/application-management.png)
+
+### Windows Installer
+
+Install PlayTrack using the Windows setup wizard.
+
+![PlayTrack Windows installer](assets/screenshots/installer.png)
+
+## Features
+
+- **Application Tracking** — Record time spent in selected Windows applications and games.
+- **Automatic Process Detection** — Detect running applications and update their tracked time.
+- **Background Tracking** — Run the tracker separately from the dashboard.
+- **Persistent Playtime Records** — Save accumulated playtime locally.
+- **Desktop Dashboard** — View tracked applications, playtime totals, and process status.
+- **Scan Folder Management** — Choose folders for automatic application discovery.
+- **Windows Startup Integration** — Support automatic tracker startup when signing in to Windows.
+- **Standalone Installer** — Install PlayTrack without setting up the development toolchain.
 
 ## Installation
 
@@ -28,7 +44,7 @@ Track how much time you spend using your favorite applications and games with Pl
 3. Run the installer and follow the setup instructions.
 4. Launch PlayTrack from the Start Menu or desktop shortcut.
 
-PlayTrack stores its local configuration and playtime data under your Windows local application data directory.
+PlayTrack stores its configuration and playtime data locally under your Windows Local AppData directory.
 
 ## Technology Stack
 
@@ -40,21 +56,15 @@ PlayTrack stores its local configuration and playtime data under your Windows lo
 - **nlohmann/json** — Local data persistence
 - **Inno Setup** — Windows installer
 
-## Development Setup
-
-To build PlayTrack from source, you will need a compatible C++17 compiler, CMake, Ninja or another supported build tool, and the required Raylib and JSON dependencies.
-
-The installer is intended for users who want to run PlayTrack without configuring the development environment.
-
 ## Project Status
 
 **Latest release: v1.0.0**
 
-PlayTrack's first public release is available for Windows. Testing on additional systems and further improvements will help guide future versions.
+The first public Windows release is available. PlayTrack has been tested on the developer's PC and an additional Windows laptop. Further testing and user feedback will help guide future improvements.
 
-## Feedback and Contributions
+## Feedback
 
-Found a bug or have an idea for an improvement? Open an issue in this repository with details about the problem or suggestion.
+Found a bug or have a suggestion? Open an issue in this repository and include details about the problem or improvement.
 
 ---
 
